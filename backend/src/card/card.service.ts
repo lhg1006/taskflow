@@ -125,6 +125,115 @@ export class CardService {
     return cards;
   }
 
+  async searchCards(
+    boardId: string,
+    userId: string,
+    filters: {
+      keyword?: string;
+      assigneeId?: string;
+      labels?: string[];
+      dueDateFilter?: 'overdue' | 'upcoming' | 'none';
+    },
+  ) {
+    // Check if board exists and user has access
+    const board = await this.prisma.board.findUnique({
+      where: { id: boardId },
+      include: {
+        workspace: true,
+      },
+    });
+
+    if (!board) {
+      throw new NotFoundException('Board not found');
+    }
+
+    await this.checkWorkspaceMember(board.workspaceId, userId);
+
+    // Build where clause
+    const where: any = {
+      column: {
+        boardId,
+      },
+    };
+
+    // Keyword search (title or description)
+    if (filters.keyword) {
+      where.OR = [
+        { title: { contains: filters.keyword, mode: 'insensitive' } },
+        { description: { contains: filters.keyword, mode: 'insensitive' } },
+      ];
+    }
+
+    // Filter by assignee
+    if (filters.assigneeId) {
+      where.assigneeId = filters.assigneeId;
+    }
+
+    // Filter by labels
+    if (filters.labels && filters.labels.length > 0) {
+      where.labels = {
+        hasSome: filters.labels,
+      };
+    }
+
+    // Filter by due date
+    if (filters.dueDateFilter) {
+      const now = new Date();
+      if (filters.dueDateFilter === 'overdue') {
+        where.dueDate = {
+          lt: now,
+        };
+      } else if (filters.dueDateFilter === 'upcoming') {
+        const nextWeek = new Date();
+        nextWeek.setDate(now.getDate() + 7);
+        where.dueDate = {
+          gte: now,
+          lte: nextWeek,
+        };
+      } else if (filters.dueDateFilter === 'none') {
+        where.dueDate = null;
+      }
+    }
+
+    const cards = await this.prisma.card.findMany({
+      where,
+      include: {
+        column: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        comments: {
+          select: {
+            id: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return cards;
+  }
+
   async findOne(cardId: string, userId: string) {
     const card = await this.prisma.card.findUnique({
       where: { id: cardId },

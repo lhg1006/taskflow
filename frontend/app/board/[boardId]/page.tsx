@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/store/auth-store';
@@ -32,6 +32,7 @@ import { PriorityBadge } from '@/components/PriorityBadge';
 import { DueDateBadge } from '@/components/DueDateBadge';
 import { HelpModal } from '@/components/HelpModal';
 import { AnimatedModal } from '@/components/AnimatedModal';
+import { CardSearchBar } from '@/components/CardSearchBar';
 import { KanbanColumnSkeleton } from '@/components/skeletons/KanbanColumnSkeleton';
 import { MessageSquare, Paperclip, CheckSquare, HelpCircle, MoreVertical, Edit2, Trash2, Settings, Menu, X, Plus } from 'lucide-react';
 
@@ -419,6 +420,27 @@ export default function BoardPage() {
     };
   }, [boardId, user, fetchBoard]);
 
+  // Extract unique members from cards for search filter
+  const boardMembers = useMemo(() => {
+    if (!currentBoard?.columns) return [];
+
+    const membersMap = new Map();
+    currentBoard.columns.forEach(column => {
+      column.cards?.forEach(card => {
+        if (card.assignee) {
+          membersMap.set(card.assignee.name, {
+            id: card.assignee.name, // Using name as ID since we don't have user ID in card data
+            name: card.assignee.name,
+            email: '', // Not available in current card data structure
+            avatar: card.assignee.avatar,
+          });
+        }
+      });
+    });
+
+    return Array.from(membersMap.values());
+  }, [currentBoard]);
+
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
   };
@@ -666,6 +688,17 @@ export default function BoardPage() {
                 <span className="text-blue-600 font-semibold truncate max-w-[150px] sm:max-w-[200px]">
                   {currentBoard?.name || 'Board'}
                 </span>
+              </div>
+            </div>
+
+            {/* Search Bar */}
+            <div className="flex-1 max-w-md mx-4 hidden md:flex items-center">
+              <div className="w-full">
+                <CardSearchBar
+                  boardId={boardId}
+                  members={boardMembers}
+                  onCardClick={(cardId) => router.push(`/board/${boardId}/card/${cardId}`)}
+                />
               </div>
             </div>
 

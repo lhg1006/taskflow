@@ -13,6 +13,7 @@ import { CardService } from './card.service';
 import { CreateCardDto } from './dto/create-card.dto';
 import { UpdateCardDto } from './dto/update-card.dto';
 import { MoveCardDto } from './dto/move-card.dto';
+import { SearchCardDto } from './dto/search-card.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
@@ -29,6 +30,15 @@ export class CardController {
   @Get()
   findAllByColumn(@CurrentUser() user: any, @Query('columnId') columnId: string) {
     return this.cardService.findAllByColumn(columnId, user.id);
+  }
+
+  @Get('search')
+  searchCards(
+    @CurrentUser() user: any,
+    @Query('boardId') boardId: string,
+    @Query() filters: SearchCardDto,
+  ) {
+    return this.cardService.searchCards(boardId, user.id, filters);
   }
 
   @Get(':id')

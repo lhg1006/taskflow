@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/store/auth-store';
 import { useBoardStore } from '@/store/board-store';
+import { connectToBoard, disconnectFromBoard } from '@/lib/socket';
 import {
   DndContext,
   DragOverlay,
@@ -362,6 +363,61 @@ export default function BoardPage() {
       fetchBoard(boardId);
     }
   }, [boardId, fetchBoard]);
+
+  // Real-time Socket connection
+  useEffect(() => {
+    if (!boardId || !user) return;
+
+    // Get token from localStorage
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    console.log('[Board] Connecting to Socket for board:', boardId);
+    const socket = connectToBoard(boardId, token);
+
+    // Listen for card events
+    socket.on('cardCreated', (data) => {
+      console.log('[Board] Card created event:', data);
+      fetchBoard(boardId);
+    });
+
+    socket.on('cardUpdated', (data) => {
+      console.log('[Board] Card updated event:', data);
+      fetchBoard(boardId);
+    });
+
+    socket.on('cardDeleted', (data) => {
+      console.log('[Board] Card deleted event:', data);
+      fetchBoard(boardId);
+    });
+
+    socket.on('cardMoved', (data) => {
+      console.log('[Board] Card moved event:', data);
+      fetchBoard(boardId);
+    });
+
+    // Listen for column events
+    socket.on('columnCreated', (data) => {
+      console.log('[Board] Column created event:', data);
+      fetchBoard(boardId);
+    });
+
+    socket.on('columnUpdated', (data) => {
+      console.log('[Board] Column updated event:', data);
+      fetchBoard(boardId);
+    });
+
+    socket.on('columnDeleted', (data) => {
+      console.log('[Board] Column deleted event:', data);
+      fetchBoard(boardId);
+    });
+
+    // Cleanup on unmount
+    return () => {
+      console.log('[Board] Disconnecting from Socket');
+      disconnectFromBoard(boardId);
+    };
+  }, [boardId, user, fetchBoard]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);

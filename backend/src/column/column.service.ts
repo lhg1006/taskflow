@@ -2,14 +2,21 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateColumnDto } from './dto/create-column.dto';
 import { UpdateColumnDto } from './dto/update-column.dto';
+import { BoardGateway } from '../board/board.gateway';
 
 @Injectable()
 export class ColumnService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => BoardGateway))
+    private boardGateway: BoardGateway,
+  ) {}
 
   async create(userId: string, createColumnDto: CreateColumnDto) {
     // Check if board exists and user has access
@@ -47,6 +54,9 @@ export class ColumnService {
         },
       },
     });
+
+    // Emit real-time event
+    this.boardGateway.emitColumnCreated(createColumnDto.boardId, column);
 
     return column;
   }
@@ -176,6 +186,9 @@ export class ColumnService {
       },
     });
 
+    // Emit real-time event
+    this.boardGateway.emitColumnUpdated(column.board.id, updatedColumn);
+
     return updatedColumn;
   }
 
@@ -194,9 +207,14 @@ export class ColumnService {
     // Check board access
     await this.checkBoardAccess(column.boardId, userId);
 
+    const boardId = column.board.id;
+
     await this.prisma.column.delete({
       where: { id: columnId },
     });
+
+    // Emit real-time event
+    this.boardGateway.emitColumnDeleted(boardId, columnId);
 
     return { message: 'Column deleted successfully' };
   }

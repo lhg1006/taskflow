@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCardDto } from './dto/create-card.dto';
@@ -12,6 +14,7 @@ import {
   NotificationService,
   NotificationType,
 } from '../notification/notification.service';
+import { BoardGateway } from '../board/board.gateway';
 
 @Injectable()
 export class CardService {
@@ -19,11 +22,13 @@ export class CardService {
     private prisma: PrismaService,
     private activityService: ActivityService,
     private notificationService: NotificationService,
+    @Inject(forwardRef(() => BoardGateway))
+    private boardGateway: BoardGateway,
   ) {}
 
   async create(userId: string, createCardDto: CreateCardDto) {
     // Check if column exists and user has access
-    await this.checkColumnAccess(createCardDto.columnId, userId);
+    const column = await this.checkColumnAccess(createCardDto.columnId, userId);
 
     // Get the current max order for the column
     const maxOrderCard = await this.prisma.card.findFirst({
@@ -73,6 +78,12 @@ export class CardService {
       ActivityType.CREATE_CARD,
       { title: card.title },
     );
+
+    // Emit real-time event
+    this.boardGateway.emitCardCreated(column.board.id, {
+      ...card,
+      columnId: createCardDto.columnId,
+    });
 
     return card;
   }
@@ -317,6 +328,12 @@ export class CardService {
       }
     }
 
+    // Emit real-time event
+    this.boardGateway.emitCardUpdated(card.column.board.id, {
+      ...updatedCard,
+      columnId: card.columnId,
+    });
+
     return updatedCard;
   }
 
@@ -380,6 +397,15 @@ export class CardService {
       );
     }
 
+    // Emit real-time event
+    this.boardGateway.emitCardMoved(card.column.board.id, {
+      cardId,
+      fromColumnId: card.columnId,
+      toColumnId: moveCardDto.columnId,
+      order: moveCardDto.order,
+      card: movedCard,
+    });
+
     return movedCard;
   }
 
@@ -402,9 +428,14 @@ export class CardService {
     // Check column access
     await this.checkColumnAccess(card.columnId, userId);
 
+    const boardId = card.column.board.id;
+
     await this.prisma.card.delete({
       where: { id: cardId },
     });
+
+    // Emit real-time event
+    this.boardGateway.emitCardDeleted(boardId, cardId);
 
     return { message: 'Card deleted successfully' };
   }

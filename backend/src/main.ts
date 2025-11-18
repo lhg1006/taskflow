@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { join } from 'path';
 import * as express from 'express';
@@ -28,8 +29,28 @@ async function bootstrap() {
     }),
   );
 
+  // Swagger API Documentation
+  const config = new DocumentBuilder()
+    .setTitle('TaskFlow API')
+    .setDescription('TaskFlow Kanban Board API Documentation')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .addTag('auth', 'Authentication endpoints')
+    .addTag('workspaces', 'Workspace management')
+    .addTag('boards', 'Board management')
+    .addTag('columns', 'Column management')
+    .addTag('cards', 'Card management')
+    .addTag('comments', 'Comment management')
+    .addTag('labels', 'Label management')
+    .addTag('activities', 'Activity tracking')
+    .addTag('dashboard', 'Dashboard statistics')
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, document);
+
   const port = process.env.PORT || 3001;
   await app.listen(port);
   console.log(`🚀 Server running on http://localhost:${port}`);
+  console.log(`📚 API Documentation available at http://localhost:${port}/api`);
 }
 bootstrap();

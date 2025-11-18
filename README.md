@@ -194,6 +194,7 @@ npm run dev
 ### 4. 접속
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:3001
+- API Docs (Swagger): http://localhost:3001/api
 
 ---
 
@@ -365,13 +366,3 @@ MIT License
 프로젝트에 대한 문의나 피드백은 환영합니다!
 
 - **GitHub**: [@lhg1006](https://github.com/lhg1006)
-
----
-
-<div align="center">
-
-**⭐️ Star this repo if you find it helpful!**
-
-Made with ❤️ for developers
-
-</div>

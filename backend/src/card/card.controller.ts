@@ -22,6 +22,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 export class CardController {
   constructor(private readonly cardService: CardService) {}
 
+
   @Post()
   create(@CurrentUser() user: any, @Body() createCardDto: CreateCardDto) {
     return this.cardService.create(user.id, createCardDto);
@@ -64,8 +65,72 @@ export class CardController {
     return this.cardService.move(id, user.id, moveCardDto);
   }
 
+  @Patch(':id/toggle-completed')
+  toggleCompleted(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.cardService.toggleCompleted(id, user.id);
+  }
+
+  @Post(':id/copy')
+  copy(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.cardService.copy(id, user.id);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: any) {
     return this.cardService.remove(id, user.id);
   }
+
+  @Patch(':id/archive')
+  archive(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.cardService.archive(id, user.id);
+  }
+
+  @Patch(':id/unarchive')
+  unarchive(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.cardService.unarchive(id, user.id);
+  }
+
+  @Get('board/:boardId/archived')
+  getArchivedCards(
+    @Param('boardId') boardId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.cardService.getArchivedCards(boardId, user.id);
+  }
+
+  // Checklist endpoints
+  @Post(':cardId/checklist')
+  addChecklistItem(
+    @Param('cardId') cardId: string,
+    @CurrentUser() user: any,
+    @Body('content') content: string,
+  ) {
+    return this.cardService.addChecklistItem(cardId, user.id, content);
+  }
+
+  @Patch(':cardId/checklist/:itemId')
+  updateChecklistItem(
+    @Param('itemId') itemId: string,
+    @CurrentUser() user: any,
+    @Body('content') content: string,
+  ) {
+    return this.cardService.updateChecklistItem(itemId, user.id, content);
+  }
+
+  @Patch(':cardId/checklist/:itemId/toggle')
+  toggleChecklistItem(
+    @Param('itemId') itemId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.cardService.toggleChecklistItem(itemId, user.id);
+  }
+
+  @Delete(':cardId/checklist/:itemId')
+  deleteChecklistItem(
+    @Param('itemId') itemId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.cardService.deleteChecklistItem(itemId, user.id);
+  }
+
 }

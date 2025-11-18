@@ -38,6 +38,7 @@ export const CardSearchBar = ({ boardId, members, onCardClick }: CardSearchBarPr
   const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>('');
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [dueDateFilter, setDueDateFilter] = useState<string>('');
+  const [completionFilter, setCompletionFilter] = useState<string>('');
   const [searchResults, setSearchResults] = useState<Card[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -55,7 +56,7 @@ export const CardSearchBar = ({ boardId, members, onCardClick }: CardSearchBarPr
 
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
-      if (isExpanded && (keyword || selectedAssigneeId || selectedLabels.length > 0 || dueDateFilter)) {
+      if (isExpanded && (keyword || selectedAssigneeId || selectedLabels.length > 0 || dueDateFilter || completionFilter)) {
         performSearch();
       } else {
         setSearchResults([]);
@@ -63,7 +64,7 @@ export const CardSearchBar = ({ boardId, members, onCardClick }: CardSearchBarPr
     }, 300);
 
     return () => clearTimeout(debounceTimer);
-  }, [keyword, selectedAssigneeId, selectedLabels, dueDateFilter, isExpanded]);
+  }, [keyword, selectedAssigneeId, selectedLabels, dueDateFilter, completionFilter, isExpanded]);
 
   const performSearch = async () => {
     setIsLoading(true);
@@ -78,6 +79,7 @@ export const CardSearchBar = ({ boardId, members, onCardClick }: CardSearchBarPr
         selectedLabels.forEach(label => params.append('labels', label));
       }
       if (dueDateFilter) params.append('dueDateFilter', dueDateFilter);
+      if (completionFilter) params.append('completionFilter', completionFilter);
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/cards/search?${params.toString()}`,
@@ -112,10 +114,11 @@ export const CardSearchBar = ({ boardId, members, onCardClick }: CardSearchBarPr
     setSelectedAssigneeId('');
     setSelectedLabels([]);
     setDueDateFilter('');
+    setCompletionFilter('');
     setSearchResults([]);
   };
 
-  const hasActiveFilters = keyword || selectedAssigneeId || selectedLabels.length > 0 || dueDateFilter;
+  const hasActiveFilters = keyword || selectedAssigneeId || selectedLabels.length > 0 || dueDateFilter || completionFilter;
 
   return (
     <div className="relative">
@@ -216,6 +219,23 @@ export const CardSearchBar = ({ boardId, members, onCardClick }: CardSearchBarPr
                 <option value="overdue">지연됨</option>
                 <option value="upcoming">다가오는 일주일</option>
                 <option value="none">마감일 없음</option>
+              </select>
+            </div>
+
+            {/* Completion Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                완료 상태
+              </label>
+              <select
+                value={completionFilter}
+                onChange={(e) => setCompletionFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">전체</option>
+                <option value="completed">완료됨</option>
+                <option value="incomplete">미완료</option>
+                <option value="all">모두 보기</option>
               </select>
             </div>
           </div>

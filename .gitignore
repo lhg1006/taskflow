@@ -15,7 +15,6 @@ build/
 dist/
 
 # Misc
-.DS_Store
 *.pem
 
 # Debug
@@ -45,3 +44,9 @@ next-env.d.ts
 # OS
 .DS_Store
 Thumbs.db
+
+# Uploads
+backend/uploads/
+
+# Claude AI
+.claude/

@@ -13,6 +13,8 @@ import { CommentModule } from './comment/comment.module';
 import { AttachmentModule } from './attachment/attachment.module';
 import { ActivityModule } from './activity/activity.module';
 import { NotificationModule } from './notification/notification.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { LabelModule } from './label/label.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { NotificationModule } from './notification/notification.module';
     AttachmentModule,
     ActivityModule,
     NotificationModule,
+    DashboardModule,
+    LabelModule,
   ],
   controllers: [AppController],
   providers: [AppService],

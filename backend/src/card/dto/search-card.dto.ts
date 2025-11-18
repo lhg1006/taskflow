@@ -17,4 +17,8 @@ export class SearchCardDto {
   @IsOptional()
   @IsEnum(['overdue', 'upcoming', 'none'])
   dueDateFilter?: 'overdue' | 'upcoming' | 'none';
+
+  @IsOptional()
+  @IsEnum(['completed', 'incomplete', 'all'])
+  completionFilter?: 'completed' | 'incomplete' | 'all';
 }

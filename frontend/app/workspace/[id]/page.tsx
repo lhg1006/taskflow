@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useBoardStore } from '@/store/board-store';
@@ -65,7 +66,7 @@ export default function WorkspacePage() {
       console.error('Failed to fetch members:', error);
       // If 403, user is not a member of this workspace
       if (error?.response?.status === 403) {
-        alert('이 워크스페이스에 접근할 권한이 없습니다.');
+        toast.error('이 워크스페이스에 접근할 권한이 없습니다.');
         router.push('/dashboard');
       }
     }
@@ -144,14 +145,32 @@ export default function WorkspacePage() {
         email: inviteEmail,
         role: inviteRole,
       });
+      toast.success('멤버 초대를 보냈습니다!');
       setShowInviteMemberModal(false);
       setInviteEmail('');
       setInviteRole('MEMBER');
       await fetchMembers();
       await fetchWorkspaces();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to invite member:', error);
-      alert('멤버 초대에 실패했습니다. 이메일을 확인해주세요.');
+
+      // Extract error message from response
+      const errorMessage = error?.response?.data?.message;
+
+      if (error?.response?.status === 409) {
+        // Conflict errors - user already member or invitation already sent
+        if (errorMessage === 'User is already a member') {
+          toast.error('이미 워크스페이스의 멤버입니다.');
+        } else if (errorMessage === 'Invitation already sent') {
+          toast.error('이미 초대를 보냈습니다.');
+        } else {
+          toast.error(errorMessage || '이미 초대되었거나 멤버입니다.');
+        }
+      } else if (error?.response?.status === 404) {
+        toast.error('해당 이메일의 사용자를 찾을 수 없습니다.');
+      } else {
+        toast.error(errorMessage || '멤버 초대에 실패했습니다.');
+      }
     }
   };
 
@@ -160,11 +179,13 @@ export default function WorkspacePage() {
 
     try {
       await workspaceApi.removeMember(workspaceId, memberId);
+      toast.success('멤버를 제거했습니다.');
       await fetchMembers();
       await fetchWorkspaces();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to remove member:', error);
-      alert('멤버 제거에 실패했습니다.');
+      const errorMessage = error?.response?.data?.message;
+      toast.error(errorMessage || '멤버 제거에 실패했습니다.');
     }
   };
 

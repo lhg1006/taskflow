@@ -25,13 +25,34 @@ import {
   Download,
   Upload,
   Activity,
+  Archive,
 } from 'lucide-react';
+
+interface Label {
+  id: string;
+  name: string;
+  color: string;
+  boardId: string;
+}
+
+interface CardLabel {
+  id: string;
+  label: Label;
+}
+
+interface ChecklistItem {
+  id: string;
+  content: string;
+  isCompleted: boolean;
+  order: number;
+}
 
 interface Card {
   id: string;
   title: string;
   description?: string;
   dueDate?: string;
+  assigneeId?: string; // For API updates
   assignee?: {
     id: string;
     name: string;
@@ -42,7 +63,10 @@ interface Card {
     name: string;
     avatar?: string;
   };
-  labels: string[];
+  labels: string[]; // Deprecated - for backward compatibility
+  cardLabels?: CardLabel[];
+  checklistItems?: ChecklistItem[];
+  isCompleted?: boolean;
   createdAt?: string;
   updatedAt?: string;
   column?: {
@@ -134,8 +158,13 @@ export default function CardDetailPage() {
 
   // Label state
   const [showLabelModal, setShowLabelModal] = useState(false);
-  const [editingLabels, setEditingLabels] = useState<string[]>([]);
-  const [newLabel, setNewLabel] = useState('');
+  const [boardLabels, setBoardLabels] = useState<Label[]>([]);
+  const [isLoadingLabels, setIsLoadingLabels] = useState(false);
+
+  // Checklist state
+  const [newChecklistItemContent, setNewChecklistItemContent] = useState('');
+  const [editingChecklistItemId, setEditingChecklistItemId] = useState<string | null>(null);
+  const [editingChecklistItemContent, setEditingChecklistItemContent] = useState('');
 
   // Attachment state
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -193,6 +222,37 @@ export default function CardDetailPage() {
 
     fetchMembers();
   }, [card?.column?.board?.workspaceId]);
+
+  // Fetch board labels
+  useEffect(() => {
+    const fetchLabels = async () => {
+      if (!boardId) return;
+
+      try {
+        setIsLoadingLabels(true);
+        const token = localStorage.getItem('token');
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/labels?boardId=${boardId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          setBoardLabels(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch labels:', error);
+      } finally {
+        setIsLoadingLabels(false);
+      }
+    };
+
+    fetchLabels();
+  }, [boardId]);
 
   // Fetch comments
   useEffect(() => {
@@ -276,6 +336,90 @@ export default function CardDetailPage() {
     }
   };
 
+  const handleToggleCompleted = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/cards/${cardId}/toggle-completed`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle card completion');
+      }
+
+      // Refetch card data
+      const cardResponse = await api.get(`/cards/${cardId}`);
+      setCard(cardResponse.data);
+      setTitle(cardResponse.data.title);
+      setDescription(cardResponse.data.description || '');
+
+      // Refetch activities to show completion activity
+      const activityData = await activityApi.getByCardId(cardId);
+      setActivities(activityData);
+    } catch (error) {
+      console.error('Failed to toggle card completion:', error);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (window.confirm('이 카드를 복사하시겠습니까?')) {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/cards/${cardId}/copy`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to copy card');
+        }
+
+        const copiedCard = await response.json();
+        // Redirect to the copied card
+        router.push(`/board/${boardId}/card/${copiedCard.id}`);
+      } catch (error) {
+        console.error('Failed to copy card:', error);
+      }
+    }
+  };
+
+  const handleArchive = async () => {
+    if (window.confirm('이 카드를 아카이브하시겠습니까?')) {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/cards/${cardId}/archive`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to archive card');
+        }
+
+        // Go back to board
+        router.push(`/board/${boardId}`);
+      } catch (error) {
+        console.error('Failed to archive card:', error);
+      }
+    }
+  };
+
   const handleBack = () => {
     router.push(`/board/${boardId}`);
   };
@@ -306,7 +450,7 @@ export default function CardDetailPage() {
 
   const handleAssigneeChange = async (memberId: string | null) => {
     try {
-      await handleUpdate({ assigneeId: memberId });
+      await handleUpdate({ assigneeId: memberId || undefined });
       setShowAssigneeDropdown(false);
     } catch (error) {
       console.error('Failed to update assignee:', error);
@@ -331,24 +475,159 @@ export default function CardDetailPage() {
     }
   };
 
-  const handleSaveLabels = async () => {
+  const handleToggleLabel = async (labelId: string) => {
+    if (!card) return;
+
+    const isLabelAssigned = card.cardLabels?.some((cl) => cl.label.id === labelId);
+
     try {
-      await handleUpdate({ labels: editingLabels });
-      setShowLabelModal(false);
+      const token = localStorage.getItem('token');
+      const method = isLabelAssigned ? 'DELETE' : 'POST';
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/labels/card/${cardId}/label/${labelId}`,
+        {
+          method,
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle label');
+      }
+
+      // Refresh card data
+      const cardResponse = await api.get(`/cards/${cardId}`);
+      setCard(cardResponse.data);
     } catch (error) {
-      console.error('Failed to update labels:', error);
+      console.error('Failed to toggle label:', error);
     }
   };
 
-  const handleAddLabel = () => {
-    if (newLabel.trim() && !editingLabels.includes(newLabel.trim())) {
-      setEditingLabels([...editingLabels, newLabel.trim()]);
-      setNewLabel('');
+  // Checklist functions
+  const handleAddChecklistItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChecklistItemContent.trim()) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/cards/${cardId}/checklist`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ content: newChecklistItemContent }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to add checklist item');
+      }
+
+      setNewChecklistItemContent('');
+      // Refresh card data
+      const cardResponse = await api.get(`/cards/${cardId}`);
+      setCard(cardResponse.data);
+    } catch (error) {
+      console.error('Failed to add checklist item:', error);
     }
   };
 
-  const handleRemoveLabel = (label: string) => {
-    setEditingLabels(editingLabels.filter((l) => l !== label));
+  const handleToggleChecklistItem = async (itemId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/cards/${cardId}/checklist/${itemId}/toggle`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle checklist item');
+      }
+
+      // Refresh card data
+      const cardResponse = await api.get(`/cards/${cardId}`);
+      setCard(cardResponse.data);
+    } catch (error) {
+      console.error('Failed to toggle checklist item:', error);
+    }
+  };
+
+  const handleUpdateChecklistItem = async (itemId: string) => {
+    if (!editingChecklistItemContent.trim()) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/cards/${cardId}/checklist/${itemId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ content: editingChecklistItemContent }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to update checklist item');
+      }
+
+      setEditingChecklistItemId(null);
+      setEditingChecklistItemContent('');
+      // Refresh card data
+      const cardResponse = await api.get(`/cards/${cardId}`);
+      setCard(cardResponse.data);
+    } catch (error) {
+      console.error('Failed to update checklist item:', error);
+    }
+  };
+
+  const handleDeleteChecklistItem = async (itemId: string) => {
+    if (window.confirm('이 체크리스트 항목을 삭제하시겠습니까?')) {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/cards/${cardId}/checklist/${itemId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to delete checklist item');
+        }
+
+        // Refresh card data
+        const cardResponse = await api.get(`/cards/${cardId}`);
+        setCard(cardResponse.data);
+      } catch (error) {
+        console.error('Failed to delete checklist item:', error);
+      }
+    }
+  };
+
+  const startEditingChecklistItem = (item: ChecklistItem) => {
+    setEditingChecklistItemId(item.id);
+    setEditingChecklistItemContent(item.content);
+  };
+
+  const cancelEditingChecklistItem = () => {
+    setEditingChecklistItemId(null);
+    setEditingChecklistItemContent('');
   };
 
   // Comment functions
@@ -707,6 +986,10 @@ export default function CardDetailPage() {
         return `파일 "${details.filename}"을 첨부했습니다`;
       case 'MOVE_CARD':
         return `카드를 "${details.fromColumn}"에서 "${details.toColumn}"(으)로 이동했습니다`;
+      case 'COMPLETE_CARD':
+        return '카드를 완료했습니다';
+      case 'REOPEN_CARD':
+        return '카드를 재오픈했습니다';
       default:
         return '활동을 기록했습니다';
     }
@@ -759,6 +1042,19 @@ export default function CardDetailPage() {
             </button>
             <div className="ml-auto flex items-center gap-4">
               <button
+                onClick={handleCopy}
+                className="px-4 py-2 text-sm text-blue-600 hover:text-blue-700 transition cursor-pointer"
+              >
+                카드 복사
+              </button>
+              <button
+                onClick={handleArchive}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-700 transition cursor-pointer flex items-center gap-1"
+              >
+                <Archive className="w-4 h-4" />
+                아카이브
+              </button>
+              <button
                 onClick={handleDelete}
                 className="px-4 py-2 text-sm text-red-600 hover:text-red-700 transition cursor-pointer"
               >
@@ -775,9 +1071,16 @@ export default function CardDetailPage() {
           {/* Left Column - Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Title */}
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div className={`bg-white rounded-lg shadow-md p-6 border-l-4 ${
+              card.isCompleted ? 'border-green-500 bg-gray-50' : 'border-blue-500'
+            }`}>
               <div className="flex items-start gap-3">
-                <CheckSquare className="w-6 h-6 text-blue-600 mt-1 flex-shrink-0" />
+                <input
+                  type="checkbox"
+                  checked={card.isCompleted || false}
+                  onChange={handleToggleCompleted}
+                  className="mt-2 w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer flex-shrink-0"
+                />
                 <div className="flex-1">
                   {isEditingTitle ? (
                     <div>
@@ -800,7 +1103,11 @@ export default function CardDetailPage() {
                   ) : (
                     <h1
                       onClick={() => setIsEditingTitle(true)}
-                      className="text-2xl font-bold text-gray-900 cursor-pointer hover:text-blue-600 transition"
+                      className={`text-2xl font-bold cursor-pointer hover:text-blue-600 transition ${
+                        card.isCompleted
+                          ? 'line-through text-gray-500'
+                          : 'text-gray-900'
+                      }`}
                     >
                       {card.title}
                     </h1>
@@ -865,6 +1172,146 @@ export default function CardDetailPage() {
                       설명을 추가하세요...
                     </span>
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* Checklist */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <CheckSquare className="w-5 h-5 text-blue-600" />
+                  체크리스트
+                  {card.checklistItems && card.checklistItems.length > 0 && (
+                    <span className="text-sm text-gray-500">
+                      ({card.checklistItems.filter(item => item.isCompleted).length}/{card.checklistItems.length})
+                    </span>
+                  )}
+                </h2>
+              </div>
+
+              {/* Add new checklist item form */}
+              <form onSubmit={handleAddChecklistItem} className="mb-4">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newChecklistItemContent}
+                    onChange={(e) => setNewChecklistItemContent(e.target.value)}
+                    placeholder="새 항목 추가..."
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newChecklistItemContent.trim()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm disabled:opacity-50 cursor-pointer"
+                  >
+                    추가
+                  </button>
+                </div>
+              </form>
+
+              {/* Checklist items */}
+              {card.checklistItems && card.checklistItems.length > 0 ? (
+                <div className="space-y-2">
+                  {/* Progress bar */}
+                  {card.checklistItems.length > 0 && (
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                        <span>진행률</span>
+                        <span>
+                          {Math.round(
+                            (card.checklistItems.filter((item) => item.isCompleted).length /
+                              card.checklistItems.length) *
+                              100
+                          )}
+                          %
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all"
+                          style={{
+                            width: `${
+                              (card.checklistItems.filter((item) => item.isCompleted).length /
+                                card.checklistItems.length) *
+                              100
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Checklist items list */}
+                  {card.checklistItems
+                    .sort((a, b) => a.order - b.order)
+                    .map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-start gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition group"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={item.isCompleted}
+                          onChange={() => handleToggleChecklistItem(item.id)}
+                          className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer flex-shrink-0"
+                        />
+                        {editingChecklistItemId === item.id ? (
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              value={editingChecklistItemContent}
+                              onChange={(e) => setEditingChecklistItemContent(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleUpdateChecklistItem(item.id);
+                                if (e.key === 'Escape') cancelEditingChecklistItem();
+                              }}
+                              className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                              autoFocus
+                            />
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                onClick={() => handleUpdateChecklistItem(item.id)}
+                                className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition cursor-pointer"
+                              >
+                                저장
+                              </button>
+                              <button
+                                onClick={cancelEditingChecklistItem}
+                                className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 transition cursor-pointer"
+                              >
+                                취소
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <span
+                              onClick={() => startEditingChecklistItem(item)}
+                              className={`flex-1 text-sm cursor-pointer ${
+                                item.isCompleted
+                                  ? 'line-through text-gray-500'
+                                  : 'text-gray-900'
+                              }`}
+                            >
+                              {item.content}
+                            </span>
+                            <button
+                              onClick={() => handleDeleteChecklistItem(item.id)}
+                              className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 transition cursor-pointer flex-shrink-0"
+                              title="삭제"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-400">
+                  <CheckSquare className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">체크리스트 항목이 없습니다</p>
                 </div>
               )}
             </div>
@@ -1361,14 +1808,15 @@ export default function CardDetailPage() {
                 레이블
               </h3>
               <div className="space-y-2">
-                {card.labels && card.labels.length > 0 ? (
+                {card.cardLabels && card.cardLabels.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
-                    {card.labels.map((label, idx) => (
+                    {card.cardLabels.map((cardLabel) => (
                       <span
-                        key={idx}
-                        className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded font-medium"
+                        key={cardLabel.id}
+                        className="px-3 py-1 text-xs text-white rounded-full font-medium shadow-sm"
+                        style={{ backgroundColor: cardLabel.label.color }}
                       >
-                        {label}
+                        {cardLabel.label.name}
                       </span>
                     ))}
                   </div>
@@ -1376,10 +1824,7 @@ export default function CardDetailPage() {
                   <p className="text-sm text-gray-400">레이블이 없습니다</p>
                 )}
                 <button
-                  onClick={() => {
-                    setEditingLabels(card.labels || []);
-                    setShowLabelModal(true);
-                  }}
+                  onClick={() => setShowLabelModal(true)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-left text-sm text-gray-600 cursor-pointer"
                 >
                   레이블 편집
@@ -1392,61 +1837,55 @@ export default function CardDetailPage() {
                       onClick={() => setShowLabelModal(false)}
                     />
                     <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-                      <div className="bg-white rounded-lg p-6 max-w-md w-full">
+                      <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
                         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                          레이블 편집
+                          레이블 선택
                         </h3>
-                        <div className="space-y-3">
-                          {editingLabels.map((label, idx) => (
-                            <div
-                              key={idx}
-                              className="flex items-center justify-between p-2 bg-blue-50 rounded"
-                            >
-                              <span className="text-sm font-medium text-blue-800">
-                                {label}
-                              </span>
-                              <button
-                                onClick={() => handleRemoveLabel(label)}
-                                className="text-red-600 hover:text-red-700 cursor-pointer"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-4 flex gap-2">
-                          <input
-                            type="text"
-                            value={newLabel}
-                            onChange={(e) => setNewLabel(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleAddLabel();
-                              }
-                            }}
-                            placeholder="새 레이블 입력"
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                          />
-                          <button
-                            onClick={handleAddLabel}
-                            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm cursor-pointer"
-                          >
-                            추가
-                          </button>
-                        </div>
-                        <div className="flex gap-2 mt-4">
-                          <button
-                            onClick={handleSaveLabels}
-                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm cursor-pointer"
-                          >
-                            저장
-                          </button>
+                        {isLoadingLabels ? (
+                          <div className="flex items-center justify-center py-8">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                          </div>
+                        ) : boardLabels.length === 0 ? (
+                          <p className="text-sm text-gray-500 text-center py-8">
+                            보드에 라벨이 없습니다. 보드 설정에서 라벨을 먼저 생성하세요.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {boardLabels.map((label) => {
+                              const isAssigned = card.cardLabels?.some(
+                                (cl) => cl.label.id === label.id
+                              );
+                              return (
+                                <button
+                                  key={label.id}
+                                  onClick={() => handleToggleLabel(label.id)}
+                                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition cursor-pointer ${
+                                    isAssigned
+                                      ? 'bg-gray-100 ring-2 ring-blue-500'
+                                      : 'bg-gray-50 hover:bg-gray-100'
+                                  }`}
+                                >
+                                  <div
+                                    className="w-8 h-8 rounded"
+                                    style={{ backgroundColor: label.color }}
+                                  />
+                                  <span className="flex-1 text-left font-medium text-gray-900">
+                                    {label.name}
+                                  </span>
+                                  {isAssigned && (
+                                    <CheckSquare className="w-5 h-5 text-blue-600" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div className="mt-4">
                           <button
                             onClick={() => setShowLabelModal(false)}
-                            className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm cursor-pointer"
+                            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm cursor-pointer"
                           >
-                            취소
+                            완료
                           </button>
                         </div>
                       </div>

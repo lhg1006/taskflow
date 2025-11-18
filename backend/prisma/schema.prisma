@@ -75,6 +75,7 @@ model Board {
   workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   columns      Column[]
+  labels       Label[]
 
   @@map("boards")
 }
@@ -102,7 +103,9 @@ model Card {
   description String?   @db.Text
   order       Int       // Card order within column
   dueDate     DateTime?
-  labels      String[]  @default([])
+  labels      String[]  @default([]) // Deprecated: kept for backward compatibility
+  isCompleted Boolean   @default(false) // Task completion status
+  isArchived  Boolean   @default(false) // Archive status
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -115,10 +118,12 @@ model Card {
   creatorId   String
   creator     User      @relation("CardCreator", fields: [creatorId], references: [id], onDelete: Cascade)
 
-  comments      Comment[]
-  attachments   Attachment[]
-  activities    ActivityLog[]
-  notifications Notification[]
+  comments       Comment[]
+  attachments    Attachment[]
+  activities     ActivityLog[]
+  notifications  Notification[]
+  cardLabels     CardLabel[]
+  checklistItems ChecklistItem[]
 
   @@map("cards")
 }
@@ -214,4 +219,54 @@ model WorkspaceInvitation {
   notifications Notification[]
 
   @@map("workspace_invitations")
+}
+
+// Label Model (Predefined labels for cards)
+model Label {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   // Hex color code (e.g., #FF5733)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  boardId   String
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  cardLabels CardLabel[]
+
+  @@map("labels")
+  @@index([boardId])
+}
+
+// CardLabel (Many-to-Many relationship between Card and Label)
+model CardLabel {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  cardId    String
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  labelId   String
+  label     Label    @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, labelId])
+  @@map("card_labels")
+  @@index([cardId])
+  @@index([labelId])
+}
+
+// ChecklistItem (Todo items within a card)
+model ChecklistItem {
+  id          String   @id @default(uuid())
+  content     String
+  isCompleted Boolean  @default(false)
+  order       Int      // Item order within checklist
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cardId String
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@map("checklist_items")
+  @@index([cardId])
 }

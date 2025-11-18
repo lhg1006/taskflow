@@ -9,6 +9,9 @@ import { HelpModal } from '@/components/HelpModal';
 import { AnimatedModal } from '@/components/AnimatedModal';
 import { WorkspaceCardSkeleton } from '@/components/skeletons/WorkspaceCardSkeleton';
 import { NotificationDropdown } from '@/components/NotificationDropdown';
+import { StatCard } from '@/components/StatCard';
+import { WorkspaceStatsChart } from '@/components/WorkspaceStatsChart';
+import { RecentCardsList } from '@/components/RecentCardsList';
 import { HelpCircle, Menu, X } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -20,6 +23,8 @@ export default function DashboardPage() {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [newWorkspaceDesc, setNewWorkspaceDesc] = useState('');
+  const [statistics, setStatistics] = useState<any>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
     checkAuth();
@@ -37,8 +42,29 @@ export default function DashboardPage() {
   useEffect(() => {
     if (user) {
       fetchWorkspaces();
+      fetchStatistics();
     }
   }, [user, fetchWorkspaces]);
+
+  const fetchStatistics = async () => {
+    try {
+      setStatsLoading(true);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/dashboard/statistics`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setStatistics(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch statistics:', error);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
 
   const handleCreateWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +126,7 @@ export default function DashboardPage() {
               </button>
               <button
                 onClick={logout}
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 cursor-pointer"
+                className="btn btn-secondary text-sm"
               >
                 로그아웃
               </button>
@@ -151,6 +177,88 @@ export default function DashboardPage() {
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
+          {/* Statistics Section */}
+          {!statsLoading && statistics && (
+            <div className="mb-8 space-y-6">
+              <h2 className="text-2xl font-bold text-gray-900">대시보드 개요</h2>
+
+              {/* Overview Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <StatCard
+                  title="워크스페이스"
+                  value={statistics.overview.totalWorkspaces}
+                  icon="🏢"
+                  className="border-blue-500"
+                />
+                <StatCard
+                  title="보드"
+                  value={statistics.overview.totalBoards}
+                  icon="📋"
+                  className="border-purple-500"
+                />
+                <StatCard
+                  title="전체 카드"
+                  value={statistics.overview.totalCards}
+                  icon="📝"
+                  className="border-green-500"
+                />
+              </div>
+
+              {/* Completion Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <StatCard
+                  title="전체 완료율"
+                  value={`${statistics.overview.completionRate}%`}
+                  description={`${statistics.overview.completedCards}/${statistics.overview.totalCards} 완료`}
+                  icon="✅"
+                  className="border-green-500"
+                />
+                <StatCard
+                  title="내 카드"
+                  value={statistics.overview.myCardsCount}
+                  description="담당 카드"
+                  icon="👤"
+                  className="border-orange-500"
+                />
+                <StatCard
+                  title="내 완료율"
+                  value={`${statistics.overview.myCompletionRate}%`}
+                  description={`${statistics.overview.myCompletedCards}/${statistics.overview.myCardsCount} 완료`}
+                  icon="🎯"
+                  className="border-blue-500"
+                />
+              </div>
+
+              {/* Due Dates Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <StatCard
+                  title="오늘 마감"
+                  value={statistics.dueDates.dueToday}
+                  icon="🔥"
+                  className="border-red-500"
+                />
+                <StatCard
+                  title="이번 주 마감"
+                  value={statistics.dueDates.dueThisWeek}
+                  icon="📅"
+                  className="border-yellow-500"
+                />
+                <StatCard
+                  title="지난 마감"
+                  value={statistics.dueDates.overdue}
+                  icon="⚠️"
+                  className="border-gray-500"
+                />
+              </div>
+
+              {/* Charts and Lists */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <WorkspaceStatsChart workspaceStats={statistics.workspaceStats} />
+                <RecentCardsList cards={statistics.recentCards} />
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">🏢 워크스페이스</h2>
@@ -158,7 +266,7 @@ export default function DashboardPage() {
             </div>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition shadow-md font-semibold cursor-pointer text-sm sm:text-base"
+              className="btn btn-primary w-full sm:w-auto text-sm sm:text-base shadow-md"
             >
               + 새 워크스페이스
             </button>
@@ -184,7 +292,7 @@ export default function DashboardPage() {
                 </p>
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition cursor-pointer"
+                  className="btn btn-primary"
                 >
                   워크스페이스 만들기
                 </button>

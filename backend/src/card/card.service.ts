@@ -93,7 +93,10 @@ export class CardService {
     await this.checkColumnAccess(columnId, userId);
 
     const cards = await this.prisma.card.findMany({
-      where: { columnId },
+      where: {
+        columnId,
+        isArchived: false, // Exclude archived cards
+      },
       include: {
         assignee: {
           select: {
@@ -116,6 +119,11 @@ export class CardService {
             id: true,
           },
         },
+        cardLabels: {
+          include: {
+            label: true,
+          },
+        },
       },
       orderBy: {
         order: 'asc',
@@ -133,6 +141,7 @@ export class CardService {
       assigneeId?: string;
       labels?: string[];
       dueDateFilter?: 'overdue' | 'upcoming' | 'none';
+      completionFilter?: 'completed' | 'incomplete' | 'all';
     },
   ) {
     // Check if board exists and user has access
@@ -154,6 +163,7 @@ export class CardService {
       column: {
         boardId,
       },
+      isArchived: false, // Exclude archived cards
     };
 
     // Keyword search (title or description)
@@ -195,6 +205,16 @@ export class CardService {
       }
     }
 
+    // Filter by completion status
+    if (filters.completionFilter) {
+      if (filters.completionFilter === 'completed') {
+        where.isCompleted = true;
+      } else if (filters.completionFilter === 'incomplete') {
+        where.isCompleted = false;
+      }
+      // 'all' means no filter, so we don't add any constraint
+    }
+
     const cards = await this.prisma.card.findMany({
       where,
       include: {
@@ -223,6 +243,11 @@ export class CardService {
         comments: {
           select: {
             id: true,
+          },
+        },
+        cardLabels: {
+          include: {
+            label: true,
           },
         },
       },
@@ -276,6 +301,16 @@ export class CardService {
           },
           orderBy: {
             createdAt: 'desc',
+          },
+        },
+        cardLabels: {
+          include: {
+            label: true,
+          },
+        },
+        checklistItems: {
+          orderBy: {
+            order: 'asc',
           },
         },
       },
@@ -549,6 +584,145 @@ export class CardService {
     return { message: 'Card deleted successfully' };
   }
 
+  async toggleCompleted(cardId: string, userId: string) {
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      include: {
+        column: {
+          include: {
+            board: true,
+          },
+        },
+      },
+    });
+
+    if (!card) {
+      throw new NotFoundException('Card not found');
+    }
+
+    // Check column access
+    await this.checkColumnAccess(card.columnId, userId);
+
+    const updatedCard = await this.prisma.card.update({
+      where: { id: cardId },
+      data: {
+        isCompleted: !card.isCompleted,
+      },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+      },
+    });
+
+    // Log activity
+    await this.activityService.logActivity(
+      cardId,
+      userId,
+      updatedCard.isCompleted
+        ? ActivityType.COMPLETE_CARD
+        : ActivityType.REOPEN_CARD,
+    );
+
+    // Emit real-time event
+    this.boardGateway.emitCardUpdated(card.column.board.id, {
+      ...updatedCard,
+      columnId: card.columnId,
+    });
+
+    return updatedCard;
+  }
+
+  async copy(cardId: string, userId: string) {
+    const originalCard = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      include: {
+        column: {
+          include: {
+            board: true,
+          },
+        },
+      },
+    });
+
+    if (!originalCard) {
+      throw new NotFoundException('Card not found');
+    }
+
+    // Check column access
+    await this.checkColumnAccess(originalCard.columnId, userId);
+
+    // Get the current max order for the column
+    const maxOrderCard = await this.prisma.card.findFirst({
+      where: { columnId: originalCard.columnId },
+      orderBy: { order: 'desc' },
+    });
+
+    const order = (maxOrderCard?.order ?? -1) + 1;
+
+    // Create a copy of the card
+    const copiedCard = await this.prisma.card.create({
+      data: {
+        title: `${originalCard.title} (복사본)`,
+        description: originalCard.description,
+        columnId: originalCard.columnId,
+        assigneeId: originalCard.assigneeId,
+        creatorId: userId,
+        order,
+        dueDate: originalCard.dueDate,
+        labels: originalCard.labels,
+        isCompleted: false, // Reset completion status for copy
+      },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+      },
+    });
+
+    // Log activity
+    await this.activityService.logActivity(
+      copiedCard.id,
+      userId,
+      ActivityType.CREATE_CARD,
+      { title: copiedCard.title, copiedFrom: originalCard.id },
+    );
+
+    // Emit real-time event
+    this.boardGateway.emitCardCreated(originalCard.column.board.id, {
+      ...copiedCard,
+      columnId: originalCard.columnId,
+    });
+
+    return copiedCard;
+  }
+
   private async checkColumnAccess(columnId: string, userId: string) {
     const column = await this.prisma.column.findUnique({
       where: { id: columnId },
@@ -585,5 +759,360 @@ export class CardService {
     }
 
     return member;
+  }
+
+  // Archive a card
+  async archive(cardId: string, userId: string) {
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      include: {
+        column: {
+          include: {
+            board: true,
+          },
+        },
+      },
+    });
+
+    if (!card) {
+      throw new NotFoundException('Card not found');
+    }
+
+    await this.checkColumnAccess(card.columnId, userId);
+
+    const updatedCard = await this.prisma.card.update({
+      where: { id: cardId },
+      data: { isArchived: true },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+      },
+    });
+
+    // Log activity
+    await this.activityService.logActivity(
+      cardId,
+      userId,
+      ActivityType.UPDATE_CARD,
+      { field: 'archived', value: true },
+    );
+
+    // Emit real-time event
+    this.boardGateway.emitCardUpdated(card.column.board.id, updatedCard);
+
+    return updatedCard;
+  }
+
+  // Unarchive a card
+  async unarchive(cardId: string, userId: string) {
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      include: {
+        column: {
+          include: {
+            board: true,
+          },
+        },
+      },
+    });
+
+    if (!card) {
+      throw new NotFoundException('Card not found');
+    }
+
+    await this.checkColumnAccess(card.columnId, userId);
+
+    const updatedCard = await this.prisma.card.update({
+      where: { id: cardId },
+      data: { isArchived: false },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+      },
+    });
+
+    // Log activity
+    await this.activityService.logActivity(
+      cardId,
+      userId,
+      ActivityType.UPDATE_CARD,
+      { field: 'archived', value: false },
+    );
+
+    // Emit real-time event
+    this.boardGateway.emitCardUpdated(card.column.board.id, updatedCard);
+
+    return updatedCard;
+  }
+
+  // Get archived cards for a board
+  async getArchivedCards(boardId: string, userId: string) {
+    const board = await this.prisma.board.findUnique({
+      where: { id: boardId },
+      include: {
+        workspace: {
+          include: {
+            members: {
+              where: { userId },
+            },
+          },
+        },
+      },
+    });
+
+    if (!board) {
+      throw new NotFoundException('Board not found');
+    }
+
+    if (board.workspace.members.length === 0) {
+      throw new ForbiddenException('You do not have access to this board');
+    }
+
+    const archivedCards = await this.prisma.card.findMany({
+      where: {
+        isArchived: true,
+        column: {
+          boardId,
+        },
+      },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        column: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+        cardLabels: {
+          include: {
+            label: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    return archivedCards;
+  }
+
+  // Checklist operations
+  async addChecklistItem(cardId: string, userId: string, content: string) {
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      include: {
+        column: {
+          include: {
+            board: {
+              include: {
+                workspace: {
+                  include: {
+                    members: {
+                      where: { userId },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        checklistItems: true,
+      },
+    });
+
+    if (!card) {
+      throw new NotFoundException('Card not found');
+    }
+
+    if (card.column.board.workspace.members.length === 0) {
+      throw new ForbiddenException('You do not have access to this card');
+    }
+
+    // Calculate order (max order + 1)
+    const maxOrder =
+      card.checklistItems.length > 0
+        ? Math.max(...card.checklistItems.map((item) => item.order))
+        : -1;
+
+    const checklistItem = await this.prisma.checklistItem.create({
+      data: {
+        content,
+        order: maxOrder + 1,
+        cardId,
+      },
+    });
+
+    return checklistItem;
+  }
+
+  async updateChecklistItem(
+    itemId: string,
+    userId: string,
+    content: string,
+  ) {
+    const item = await this.prisma.checklistItem.findUnique({
+      where: { id: itemId },
+      include: {
+        card: {
+          include: {
+            column: {
+              include: {
+                board: {
+                  include: {
+                    workspace: {
+                      include: {
+                        members: {
+                          where: { userId },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Checklist item not found');
+    }
+
+    if (item.card.column.board.workspace.members.length === 0) {
+      throw new ForbiddenException(
+        'You do not have access to this checklist item',
+      );
+    }
+
+    const updatedItem = await this.prisma.checklistItem.update({
+      where: { id: itemId },
+      data: { content },
+    });
+
+    return updatedItem;
+  }
+
+  async toggleChecklistItem(itemId: string, userId: string) {
+    const item = await this.prisma.checklistItem.findUnique({
+      where: { id: itemId },
+      include: {
+        card: {
+          include: {
+            column: {
+              include: {
+                board: {
+                  include: {
+                    workspace: {
+                      include: {
+                        members: {
+                          where: { userId },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Checklist item not found');
+    }
+
+    if (item.card.column.board.workspace.members.length === 0) {
+      throw new ForbiddenException(
+        'You do not have access to this checklist item',
+      );
+    }
+
+    const updatedItem = await this.prisma.checklistItem.update({
+      where: { id: itemId },
+      data: { isCompleted: !item.isCompleted },
+    });
+
+    return updatedItem;
+  }
+
+  async deleteChecklistItem(itemId: string, userId: string) {
+    const item = await this.prisma.checklistItem.findUnique({
+      where: { id: itemId },
+      include: {
+        card: {
+          include: {
+            column: {
+              include: {
+                board: {
+                  include: {
+                    workspace: {
+                      include: {
+                        members: {
+                          where: { userId },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Checklist item not found');
+    }
+
+    if (item.card.column.board.workspace.members.length === 0) {
+      throw new ForbiddenException(
+        'You do not have access to this checklist item',
+      );
+    }
+
+    await this.prisma.checklistItem.delete({
+      where: { id: itemId },
+    });
+
+    return { message: 'Checklist item deleted successfully' };
   }
 }

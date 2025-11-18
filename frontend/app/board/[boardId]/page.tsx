@@ -34,7 +34,11 @@ import { HelpModal } from '@/components/HelpModal';
 import { AnimatedModal } from '@/components/AnimatedModal';
 import { CardSearchBar } from '@/components/CardSearchBar';
 import { KanbanColumnSkeleton } from '@/components/skeletons/KanbanColumnSkeleton';
-import { MessageSquare, Paperclip, CheckSquare, HelpCircle, MoreVertical, Edit2, Trash2, Settings, Menu, X, Plus } from 'lucide-react';
+import { LabelManager } from '@/components/LabelManager';
+import { CalendarView } from '@/components/CalendarView';
+import { BoardProgressChart } from '@/components/BoardProgressChart';
+import { ArchivedCardsModal } from '@/components/ArchivedCardsModal';
+import { MessageSquare, Paperclip, CheckSquare, HelpCircle, MoreVertical, Edit2, Trash2, Settings, Menu, X, Plus, Tag, LayoutGrid, Calendar, BarChart3, Archive } from 'lucide-react';
 
 interface Card {
   id: string;
@@ -52,6 +56,7 @@ interface Card {
   attachmentsCount?: number;
   checklistTotal?: number;
   checklistCompleted?: number;
+  isCompleted?: boolean;
 }
 
 interface Column {
@@ -65,9 +70,11 @@ interface Column {
 function SortableCard({
   card,
   onClick,
+  onToggleCompleted,
 }: {
   card: Card;
   onClick?: () => void;
+  onToggleCompleted?: (cardId: string) => void;
 }) {
   const {
     attributes,
@@ -94,13 +101,15 @@ function SortableCard({
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      className="bg-white p-4 rounded-lg shadow-md hover:shadow-xl transition-all border-l-4 border-blue-500 group relative"
+      className={`bg-white p-4 rounded-lg shadow-md hover:shadow-xl transition-all border-l-4 ${
+        card.isCompleted ? 'border-green-500 bg-gray-50' : 'border-blue-500'
+      } group relative`}
     >
       {/* 드래그 핸들 */}
       <div
         {...listeners}
-        className="absolute top-3 right-3 cursor-move opacity-0 group-hover:opacity-100 transition-opacity"
+        {...attributes}
+        className="absolute top-3 right-3 cursor-move opacity-0 group-hover:opacity-100 transition-opacity z-10"
         onClick={(e) => {
           e.stopPropagation();
         }}
@@ -112,9 +121,31 @@ function SortableCard({
         </div>
       </div>
 
-      <div onClick={onClick} className="cursor-pointer pr-8">
-      {/* Title */}
-      <h4 className="font-semibold text-gray-900 mb-2 text-base">{card.title}</h4>
+      <div
+        className="cursor-pointer pr-8"
+        onClick={onClick}
+      >
+      {/* Completion Checkbox + Title */}
+      <div className="flex items-start gap-2 mb-2">
+        <input
+          type="checkbox"
+          checked={card.isCompleted || false}
+          onChange={(e) => {
+            e.stopPropagation();
+            onToggleCompleted?.(card.id);
+          }}
+          className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
+        />
+        <h4
+          className={`font-semibold text-base flex-1 ${
+            card.isCompleted
+              ? 'line-through text-gray-500'
+              : 'text-gray-900'
+          }`}
+        >
+          {card.title}
+        </h4>
+      </div>
 
       {/* Description */}
       {card.description && (
@@ -203,12 +234,14 @@ function KanbanColumn({
   onCardClick,
   onEdit,
   onDelete,
+  onToggleCompleted,
 }: {
   column: Column;
   onAddCard: (columnId: string) => void;
   onCardClick: (card: Card) => void;
   onEdit?: (columnId: string) => void;
   onDelete?: (columnId: string) => void;
+  onToggleCompleted?: (cardId: string) => void;
 }) {
   const cards = column.cards || [];
   const { setNodeRef, isOver } = useDroppable({
@@ -301,6 +334,7 @@ function KanbanColumn({
                   key={card.id}
                   card={card}
                   onClick={() => onCardClick(card)}
+                  onToggleCompleted={onToggleCompleted}
                 />
               ))
             )}
@@ -340,6 +374,10 @@ export default function BoardPage() {
   const [showEditBoardModal, setShowEditBoardModal] = useState(false);
   const [showBoardMenu, setShowBoardMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showLabelManager, setShowLabelManager] = useState(false);
+  const [showArchivedCards, setShowArchivedCards] = useState(false);
+  const [viewMode, setViewMode] = useState<'board' | 'calendar'>('board');
+  const [showStats, setShowStats] = useState(false);
   const [selectedColumnId, setSelectedColumnId] = useState<string>('');
   const [newColumnTitle, setNewColumnTitle] = useState('');
   const [editColumnTitle, setEditColumnTitle] = useState('');
@@ -439,6 +477,20 @@ export default function BoardPage() {
     });
 
     return Array.from(membersMap.values());
+  }, [currentBoard]);
+
+  // Get all cards for calendar view
+  const allCards = useMemo(() => {
+    if (!currentBoard?.columns) return [];
+
+    return currentBoard.columns.flatMap(column =>
+      (column.cards || []).map(card => ({
+        ...card,
+        column: {
+          title: column.title,
+        },
+      }))
+    );
   }, [currentBoard]);
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -592,6 +644,30 @@ export default function BoardPage() {
     }
   };
 
+  const handleToggleCompleted = async (cardId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/cards/${cardId}/toggle-completed`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle card completion');
+      }
+
+      // Refresh board to show updated card state
+      await fetchBoard(boardId);
+    } catch (error) {
+      console.error('Failed to toggle card completion:', error);
+    }
+  };
+
   const handleEditBoard = () => {
     if (currentBoard) {
       setEditBoardName(currentBoard.name);
@@ -726,6 +802,24 @@ export default function BoardPage() {
                       <button
                         onClick={() => {
                           setShowBoardMenu(false);
+                          setShowLabelManager(true);
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 cursor-pointer"
+                      >
+                        <Tag className="w-4 h-4" /> 라벨 관리
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowBoardMenu(false);
+                          setShowArchivedCards(true);
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 cursor-pointer"
+                      >
+                        <Archive className="w-4 h-4" /> 아카이브
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowBoardMenu(false);
                           handleDeleteBoard();
                         }}
                         className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
@@ -736,6 +830,43 @@ export default function BoardPage() {
                   </>
                 )}
               </div>
+              {/* View Mode Toggle */}
+              <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode('board')}
+                  className={`p-2 rounded-lg transition ${
+                    viewMode === 'board'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  title="보드 뷰"
+                >
+                  <LayoutGrid className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => setViewMode('calendar')}
+                  className={`p-2 rounded-lg transition ${
+                    viewMode === 'calendar'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  title="캘린더 뷰"
+                >
+                  <Calendar className="w-5 h-5" />
+                </button>
+              </div>
+              {/* Stats Toggle */}
+              <button
+                onClick={() => setShowStats(!showStats)}
+                className={`p-2 rounded-lg transition ${
+                  showStats
+                    ? 'bg-blue-100 text-blue-600'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+                title="통계 보기"
+              >
+                <BarChart3 className="w-5 h-5" />
+              </button>
               <button
                 onClick={() => setShowHelpModal(true)}
                 className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition cursor-pointer"
@@ -853,7 +984,19 @@ export default function BoardPage() {
             </p>
           </div>
 
-          {isLoading ? (
+          {/* Statistics Section */}
+          {showStats && viewMode === 'board' && currentBoard?.columns && (
+            <div className="mb-6">
+              <BoardProgressChart columns={currentBoard.columns} />
+            </div>
+          )}
+
+          {viewMode === 'calendar' ? (
+            <CalendarView
+              cards={allCards}
+              onCardClick={(cardId) => router.push(`/board/${boardId}/card/${cardId}`)}
+            />
+          ) : isLoading ? (
             <div className="flex gap-3 sm:gap-5 overflow-x-auto pb-6 snap-x snap-mandatory scroll-smooth">
               <KanbanColumnSkeleton />
               <KanbanColumnSkeleton />
@@ -878,6 +1021,7 @@ export default function BoardPage() {
                     onCardClick={(card) => router.push(`/board/${boardId}/card/${card.id}`)}
                     onEdit={handleEditColumn}
                     onDelete={handleDeleteColumn}
+                    onToggleCompleted={handleToggleCompleted}
                   />
                 ))}
 
@@ -1137,6 +1281,16 @@ export default function BoardPage() {
 
       {/* Help Modal */}
       {showHelpModal && <HelpModal onClose={() => setShowHelpModal(false)} />}
+
+      {/* Label Manager Modal */}
+      {showLabelManager && (
+        <LabelManager boardId={boardId} onClose={() => setShowLabelManager(false)} />
+      )}
+
+      {/* Archived Cards Modal */}
+      {showArchivedCards && (
+        <ArchivedCardsModal boardId={boardId} onClose={() => setShowArchivedCards(false)} />
+      )}
     </motion.div>
   );
 }

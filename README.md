@@ -194,7 +194,6 @@ npm run dev
 ### 4. 접속
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:3001
-- API Docs: http://localhost:3001/api
 
 ---
 

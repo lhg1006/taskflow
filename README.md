@@ -300,7 +300,41 @@ model Card {
 
 ## 📸 스크린샷
 
-*(포트폴리오용 스크린샷을 여기에 추가하세요)*
+### 🏠 대시보드
+<img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/dashboard.png" alt="Dashboard" width="800">
+
+*실시간 통계와 차트로 프로젝트 진행 상황을 한눈에 파악*
+
+### 📋 Kanban 보드
+<img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/board.png" alt="Kanban Board" width="800">
+
+*드래그 앤 드롭으로 직관적인 작업 관리*
+
+### 🎯 워크스페이스
+<img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/workspace.png" alt="Workspace" width="800">
+
+*프로젝트별 독립적인 작업 공간*
+
+### 📝 카드 상세
+<div>
+  <img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/card-detail1.png" alt="Card Detail 1" width="400">
+  <img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/card-detail2.png" alt="Card Detail 2" width="400">
+</div>
+
+*체크리스트, 댓글, 첨부파일 등 풍부한 카드 기능*
+
+### 🔐 로그인
+<img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/login.png" alt="Login" width="800">
+
+*JWT 기반 안전한 인증 시스템*
+
+### 📱 반응형 디자인
+<div>
+  <img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/dashboard-tablet.png" alt="Tablet View" width="400">
+  <img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/dashboard-mobile.png" alt="Mobile View" width="300">
+</div>
+
+*태블릿과 모바일 환경 최적화*
 
 ---
 

@@ -298,43 +298,42 @@ model Card {
 
 ---
 
-## 📸 스크린샷
+## 📸 화면 구성
 
 ### 🏠 대시보드
-<img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/dashboard.png" alt="Dashboard" width="800">
+<img src="./screenshots/dashboard.png" alt="Dashboard" width="800">
 
 *실시간 통계와 차트로 프로젝트 진행 상황을 한눈에 파악*
 
-### 📋 Kanban 보드
-<img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/board.png" alt="Kanban Board" width="800">
+### 🎯 워크스페이스
+<img src="./screenshots/workspace.png" alt="Workspace" width="800">
+
+*프로젝트별 독립적인 작업 공간 및 멤버 관리*
+
+### 📋 칸반 보드
+<img src="./screenshots/kanban-board.png" alt="Kanban Board" width="800">
 
 *드래그 앤 드롭으로 직관적인 작업 관리*
 
-### 🎯 워크스페이스
-<img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/workspace.png" alt="Workspace" width="800">
+### 📊 보드 분석
+<img src="./screenshots/board-analytics.png" alt="Board Analytics" width="800">
 
-*프로젝트별 독립적인 작업 공간*
+*완료율, 컬럼별 카드 분포 등 보드 진행 현황 시각화*
+
+### 📅 캘린더 뷰
+<img src="./screenshots/calendar-view.png" alt="Calendar View" width="800">
+
+*마감일 기반 일정 캘린더로 작업 일정 관리*
 
 ### 📝 카드 상세
-<div>
-  <img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/card-detail1.png" alt="Card Detail 1" width="400">
-  <img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/card-detail2.png" alt="Card Detail 2" width="400">
-</div>
+<img src="./screenshots/card-detail.png" alt="Card Detail" width="800">
 
-*체크리스트, 댓글, 첨부파일 등 풍부한 카드 기능*
+*체크리스트, 담당자, 마감일, 라벨 등 풍부한 카드 기능*
 
-### 🔐 로그인
-<img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/login.png" alt="Login" width="800">
+### 💬 댓글 & 협업
+<img src="./screenshots/card-comments.png" alt="Card Comments" width="800">
 
-*JWT 기반 안전한 인증 시스템*
-
-### 📱 반응형 디자인
-<div>
-  <img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/dashboard-tablet.png" alt="Tablet View" width="400">
-  <img src="https://raw.githubusercontent.com/lhg1006/portfolio-images/main/images/taskflow/dashboard-mobile.png" alt="Mobile View" width="300">
-</div>
-
-*태블릿과 모바일 환경 최적화*
+*카드별 댓글과 활동 로그로 팀 협업 지원*
 
 ---
 
@@ -372,11 +371,11 @@ taskflow/
 - [x] 대시보드 통계
 - [x] 단위 테스트 (155개)
 
-### Phase 2 (계획)
+### Phase 2 (진행중)
 - [ ] Redis 캐싱 레이어
 - [ ] 이메일 알림
 - [ ] 파일 업로드 (AWS S3)
-- [ ] 캘린더 뷰
+- [x] 캘린더 뷰
 - [ ] 간트 차트
 - [ ] 타임라인 뷰
 
